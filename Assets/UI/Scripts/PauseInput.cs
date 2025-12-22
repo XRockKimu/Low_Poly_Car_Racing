@@ -6,15 +6,19 @@ public class PauseInput : MonoBehaviour
 
     void Update()
     {
+        // ❌ Do NOT allow ESC in Main Menu
+        if (uiManager.mainMenu.activeSelf)
+            return;
+
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (Time.timeScale == 1f)
             {
-                uiManager.ShowPauseMenu();   // pause game
+                uiManager.ShowPauseMenu();
             }
             else
             {
-                uiManager.ResumeGame();     // resume game
+                uiManager.ResumeGame();
             }
         }
     }

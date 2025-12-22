@@ -1,21 +1,24 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class UIManager : MonoBehaviour
 {
+    [Header("Menus")]
     public GameObject mainMenu;
     public GameObject pauseMenu;
     public GameObject optionsMenu;
 
-    // 🔑 remembers where Options was opened from
+    // remembers where Options was opened from
     private bool optionsFromPause = false;
 
     void Start()
     {
-        Time.timeScale = 0f;   // pause game on launch
+        // Game always starts paused at Main Menu
+        Time.timeScale = 0f;
         ShowMainMenu();
     }
 
-    // ===== MAIN MENU =====
+    // ================= MAIN MENU =================
 
     public void ShowMainMenu()
     {
@@ -27,19 +30,22 @@ public class UIManager : MonoBehaviour
 
     public void StartGame()
     {
+        // ENTER GAME (NO RESET)
         mainMenu.SetActive(false);
         pauseMenu.SetActive(false);
         optionsMenu.SetActive(false);
+
         Time.timeScale = 1f;
     }
 
-    // ===== PAUSE MENU =====
+    // ================= PAUSE MENU =================
 
     public void ShowPauseMenu()
     {
         mainMenu.SetActive(false);
         pauseMenu.SetActive(true);
         optionsMenu.SetActive(false);
+
         Time.timeScale = 0f;
     }
 
@@ -47,14 +53,14 @@ public class UIManager : MonoBehaviour
     {
         pauseMenu.SetActive(false);
         optionsMenu.SetActive(false);
+
         Time.timeScale = 1f;
     }
 
-    // ===== OPTIONS =====
+    // ================= OPTIONS =================
 
     public void ShowOptionsMenu()
     {
-        // remember if Options was opened from Pause
         optionsFromPause = pauseMenu.activeSelf;
 
         mainMenu.SetActive(false);
@@ -68,19 +74,20 @@ public class UIManager : MonoBehaviour
 
         if (optionsFromPause)
         {
-            ShowPauseMenu();   // go back to Pause menu
+            ShowPauseMenu();
         }
         else
         {
-            ShowMainMenu();    // go back to Main Menu
+            ShowMainMenu();
         }
     }
 
-    // ===== QUIT =====
+    // ================= QUIT =================
 
     public void QuitGame()
     {
-        ShowMainMenu();
+        // FULL RESET
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
-    
 }

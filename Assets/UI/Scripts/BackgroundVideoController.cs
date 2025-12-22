@@ -25,19 +25,41 @@ public class BackgroundVideoController : MonoBehaviour
         PlayerPrefs.Save();
     }
 
-    void ApplyState()
+void ApplyState()
+{
+    if (menuVideoPlayer == null)
+        return;
+
+    if (videoPaused)
     {
-        if (videoPaused)
+        if (menuVideoPlayer.isPlaying)
+            menuVideoPlayer.Pause();
+
+        videoText.SetActive(false);
+        imageText.SetActive(true);
+    }
+    else
+    {
+        // 🔒 Safety: only play when ready
+        if (!menuVideoPlayer.isPrepared)
         {
-            menuVideoPlayer.Pause();   // ⏸ Pause video
-            videoText.SetActive(false);
-            imageText.SetActive(true);
+            menuVideoPlayer.Prepare();
+            menuVideoPlayer.prepareCompleted += OnVideoPrepared;
         }
         else
         {
-            menuVideoPlayer.Play();    // ▶ Play video
-            videoText.SetActive(true);
-            imageText.SetActive(false);
+            menuVideoPlayer.Play();
         }
+
+        videoText.SetActive(true);
+        imageText.SetActive(false);
     }
+}
+
+void OnVideoPrepared(VideoPlayer vp)
+{
+    vp.prepareCompleted -= OnVideoPrepared;
+    vp.Play();
+}
+
 }
