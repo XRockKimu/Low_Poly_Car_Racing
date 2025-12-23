@@ -7,16 +7,37 @@ public class UIManager : MonoBehaviour
     public GameObject mainMenu;
     public GameObject pauseMenu;
     public GameObject optionsMenu;
+    public GameObject gameplayHUD;
+    public GameObject gameOverMenu;
 
-    // remembers where Options was opened from
+    [Header("References")]
+    public GameTimer gameTimer;
+
     private bool optionsFromPause = false;
+    public static bool IsRestarting = false;
 
-    void Start()
+void Start()
+{
+    if (IsRestarting)
     {
-        // Game always starts paused at Main Menu
+        IsRestarting = false;
+
+        mainMenu.SetActive(false);
+        pauseMenu.SetActive(false);
+        optionsMenu.SetActive(false);
+        gameOverMenu.SetActive(false);
+        gameplayHUD.SetActive(true);
+
+        Time.timeScale = 1f;
+        gameTimer.StartTimer();
+    }
+    else
+    {
         Time.timeScale = 0f;
         ShowMainMenu();
     }
+}
+
 
     // ================= MAIN MENU =================
 
@@ -25,35 +46,37 @@ public class UIManager : MonoBehaviour
         mainMenu.SetActive(true);
         pauseMenu.SetActive(false);
         optionsMenu.SetActive(false);
+        gameplayHUD.SetActive(false);
+        gameOverMenu.SetActive(false);
+
         Time.timeScale = 0f;
     }
 
     public void StartGame()
     {
-        // ENTER GAME (NO RESET)
         mainMenu.SetActive(false);
         pauseMenu.SetActive(false);
         optionsMenu.SetActive(false);
+        gameOverMenu.SetActive(false);
+        gameplayHUD.SetActive(true);
 
         Time.timeScale = 1f;
+        gameTimer.StartTimer();
     }
 
-    // ================= PAUSE MENU =================
+    // ================= PAUSE =================
 
     public void ShowPauseMenu()
     {
-        mainMenu.SetActive(false);
         pauseMenu.SetActive(true);
-        optionsMenu.SetActive(false);
-
+        gameplayHUD.SetActive(false);
         Time.timeScale = 0f;
     }
 
     public void ResumeGame()
     {
         pauseMenu.SetActive(false);
-        optionsMenu.SetActive(false);
-
+        gameplayHUD.SetActive(true);
         Time.timeScale = 1f;
     }
 
@@ -65,6 +88,7 @@ public class UIManager : MonoBehaviour
 
         mainMenu.SetActive(false);
         pauseMenu.SetActive(false);
+        gameplayHUD.SetActive(false);
         optionsMenu.SetActive(true);
     }
 
@@ -73,20 +97,58 @@ public class UIManager : MonoBehaviour
         optionsMenu.SetActive(false);
 
         if (optionsFromPause)
-        {
             ShowPauseMenu();
-        }
         else
-        {
             ShowMainMenu();
-        }
+    }
+    // ================= Back =================
+    public void BackToMainMenu()
+    {
+        IsRestarting = false;
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    // ================= QUIT =================
+    // ================= GAME OVER =================
 
+    public void ShowGameOver()
+    {
+        gameplayHUD.SetActive(false);
+        pauseMenu.SetActive(false);
+        optionsMenu.SetActive(false);
+        gameOverMenu.SetActive(true);
+
+        Time.timeScale = 0f;
+    }
+
+    // ================= BUTTON ACTIONS =================
+
+    public void RestartGame()
+    {
+        IsRestarting = true;
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    // QUIT = BACK TO START MENU
     public void QuitGame()
     {
-        // FULL RESET
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+    // Close = BACK TO START MENU
+    public void CloseGame()
+    {
+        #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+        #else
+                Application.Close();
+        #endif
+    }
+     // Save Settings
+    public void Save()
+    {
+        IsRestarting = false;
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
