@@ -6,8 +6,8 @@ public class GameTimer : MonoBehaviour
     [Header("UI")]
     public TextMeshProUGUI timerText;
 
-    [Header("Warning Settings")]
-    public float warningTime = 3f;
+    [Header("Warning")]
+    public float warningTime = 5f;
     public Color normalColor = Color.white;
     public Color warningColor = Color.red;
 
@@ -18,8 +18,9 @@ public class GameTimer : MonoBehaviour
     [Header("References")]
     public UIManager uiManager;
 
-    private float timeRemaining;
-    private bool isRunning = false;
+    private float elapsedTime;
+    private float timeLimit;
+    private bool isRunning;
     private Vector3 originalScale;
 
     void Awake()
@@ -32,11 +33,11 @@ public class GameTimer : MonoBehaviour
         if (!isRunning)
             return;
 
-        timeRemaining -= Time.deltaTime;
+        elapsedTime += Time.deltaTime;
 
-        if (timeRemaining <= 0f)
+        if (elapsedTime >= timeLimit)
         {
-            timeRemaining = 0f;
+            elapsedTime = timeLimit;
             isRunning = false;
             timerText.transform.localScale = originalScale;
             OnTimeUp();
@@ -44,7 +45,7 @@ public class GameTimer : MonoBehaviour
 
         UpdateUI();
 
-        if (timeRemaining <= warningTime)
+        if (timeLimit - elapsedTime <= warningTime)
             PulseEffect();
         else
             timerText.transform.localScale = originalScale;
@@ -52,9 +53,19 @@ public class GameTimer : MonoBehaviour
 
     public void StartTimer()
     {
-        timeRemaining = PlayerPrefs.GetInt("GameTimer", 10);
+        elapsedTime = 0f;
+
+        int minutes = PlayerPrefs.GetInt("GameTimer", 10);
+
+        // 🔒 CRITICAL SAFETY FIX (prevents instant game over)
+        minutes = Mathf.Max(1, minutes);
+
+        timeLimit = minutes * 60f; // minutes → seconds
+
         isRunning = true;
         UpdateUI();
+
+        Debug.Log($"[GameTimer] Started: {minutes} min ({timeLimit}s)");
     }
 
     public void StopTimer()
@@ -65,12 +76,15 @@ public class GameTimer : MonoBehaviour
 
     void UpdateUI()
     {
-        int totalSeconds = Mathf.CeilToInt(timeRemaining);
+        int totalSeconds = Mathf.FloorToInt(elapsedTime);
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
 
-        timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
-        timerText.color = timeRemaining <= warningTime ? warningColor : normalColor;
+        timerText.text = $"{minutes:00}:{seconds:00}";
+        timerText.color =
+            (timeLimit - elapsedTime <= warningTime)
+                ? warningColor
+                : normalColor;
     }
 
     void PulseEffect()
@@ -83,7 +97,7 @@ public class GameTimer : MonoBehaviour
 
     void OnTimeUp()
     {
-        Debug.Log("TIME UP");
+        Debug.Log("[GameTimer] TIME UP");
         uiManager.ShowGameOver();
     }
 }

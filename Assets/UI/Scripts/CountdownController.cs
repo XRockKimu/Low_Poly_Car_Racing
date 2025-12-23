@@ -32,6 +32,6 @@ public class CountdownController : MonoBehaviour
         countdownText.gameObject.SetActive(false);
 
         Time.timeScale = 1f;
-        gameTimer.StartTimer(); // ← YOUR ORIGINAL TIMER START
+        gameTimer.StartTimer();
     }
 }

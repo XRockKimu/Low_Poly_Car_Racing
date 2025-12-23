@@ -4,15 +4,18 @@ using TMPro;
 public class TimerSettings : MonoBehaviour
 {
     public TMP_Dropdown timerDropdown;
-    public GameTimer gameTimer;
 
     void Start()
     {
-        int savedTime = PlayerPrefs.GetInt("GameTimer", 10);
+        // Default = 10 minutes
+        int savedMinutes = PlayerPrefs.GetInt("GameTimer", 10);
+
+        // Safety: prevent invalid saved value
+        savedMinutes = Mathf.Max(1, savedMinutes);
 
         for (int i = 0; i < timerDropdown.options.Count; i++)
         {
-            if (timerDropdown.options[i].text == savedTime.ToString())
+            if (timerDropdown.options[i].text == savedMinutes.ToString())
             {
                 timerDropdown.value = i;
                 break;
@@ -22,16 +25,15 @@ public class TimerSettings : MonoBehaviour
 
     public void OnTimerChanged()
     {
-        int selectedTime =
+        int selectedMinutes =
             int.Parse(timerDropdown.options[timerDropdown.value].text);
 
-        PlayerPrefs.SetInt("GameTimer", selectedTime);
+        // Safety: never allow 0
+        selectedMinutes = Mathf.Max(1, selectedMinutes);
+
+        PlayerPrefs.SetInt("GameTimer", selectedMinutes);
         PlayerPrefs.Save();
 
-        // 🔥 Apply immediately if game is running
-        if (gameTimer != null)
-        {
-            gameTimer.StartTimer();
-        }
+        Debug.Log($"[TimerSettings] Time limit set to {selectedMinutes} minutes");
     }
 }
