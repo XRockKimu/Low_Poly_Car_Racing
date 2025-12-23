@@ -16,28 +16,27 @@ public class UIManager : MonoBehaviour
     private bool optionsFromPause = false;
     public static bool IsRestarting = false;
 
-void Start()
-{
-    if (IsRestarting)
+    void Start()
     {
-        IsRestarting = false;
+        if (IsRestarting)
+        {
+            IsRestarting = false;
 
-        mainMenu.SetActive(false);
-        pauseMenu.SetActive(false);
-        optionsMenu.SetActive(false);
-        gameOverMenu.SetActive(false);
-        gameplayHUD.SetActive(true);
+            mainMenu.SetActive(false);
+            pauseMenu.SetActive(false);
+            optionsMenu.SetActive(false);
+            gameOverMenu.SetActive(false);
+            gameplayHUD.SetActive(true);
 
-        Time.timeScale = 1f;
-        gameTimer.StartTimer();
+            Time.timeScale = 1f;
+            FindObjectOfType<CountdownController>().StartCountdown();
+        }
+        else
+        {
+            Time.timeScale = 0f;
+            ShowMainMenu();
+        }
     }
-    else
-    {
-        Time.timeScale = 0f;
-        ShowMainMenu();
-    }
-}
-
 
     // ================= MAIN MENU =================
 
@@ -61,7 +60,7 @@ void Start()
         gameplayHUD.SetActive(true);
 
         Time.timeScale = 1f;
-        gameTimer.StartTimer();
+        FindObjectOfType<CountdownController>().StartCountdown();
     }
 
     // ================= PAUSE =================
@@ -101,7 +100,9 @@ void Start()
         else
             ShowMainMenu();
     }
-    // ================= Back =================
+
+    // ================= BACK =================
+
     public void BackToMainMenu()
     {
         IsRestarting = false;
@@ -130,26 +131,45 @@ void Start()
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    // QUIT = BACK TO START MENU
     public void QuitGame()
     {
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
-    // Close = BACK TO START MENU
+
     public void CloseGame()
     {
-        #if UNITY_EDITOR
-                UnityEditor.EditorApplication.isPlaying = false;
-        #else
-                Application.Close();
-        #endif
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
-     // Save Settings
+
+    // ================= SAVE =================
+
     public void Save()
     {
         IsRestarting = false;
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
+
+public void SaveFromOptions()
+{
+    // If you save settings via PlayerPrefs, do it here
+    PlayerPrefs.Save();
+
+    optionsMenu.SetActive(false);
+
+    if (optionsFromPause)
+    {
+        ShowPauseMenu();   // came from Pause
+    }
+    else
+    {
+        ShowMainMenu();    // came from Main Menu
+    }
+}
+
 }
