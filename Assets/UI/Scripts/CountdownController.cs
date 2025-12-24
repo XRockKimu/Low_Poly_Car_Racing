@@ -17,6 +17,10 @@ public class CountdownController : MonoBehaviour
         Time.timeScale = 0f;
         countdownText.gameObject.SetActive(true);
 
+        // Play full 3-2-1-GO sound once
+        if (SoundManager.Instance != null)
+            SoundManager.Instance.PlayGo();
+
         countdownText.text = "3";
         yield return new WaitForSecondsRealtime(1f);
 

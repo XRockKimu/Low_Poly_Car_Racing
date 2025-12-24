@@ -9,6 +9,7 @@ public class UIManager : MonoBehaviour
     public GameObject optionsMenu;
     public GameObject gameplayHUD;
     public GameObject gameOverMenu;
+    public GameObject gameYouWonMenu;
 
     [Header("References")]
     public GameTimer gameTimer;
@@ -26,6 +27,7 @@ public class UIManager : MonoBehaviour
             pauseMenu.SetActive(false);
             optionsMenu.SetActive(false);
             gameOverMenu.SetActive(false);
+            gameYouWonMenu.SetActive(false);
             gameplayHUD.SetActive(true);
 
             Time.timeScale = 1f;
@@ -47,6 +49,7 @@ public class UIManager : MonoBehaviour
         optionsMenu.SetActive(false);
         gameplayHUD.SetActive(false);
         gameOverMenu.SetActive(false);
+        gameYouWonMenu.SetActive(false);
 
         Time.timeScale = 0f;
     }
@@ -57,6 +60,7 @@ public class UIManager : MonoBehaviour
         pauseMenu.SetActive(false);
         optionsMenu.SetActive(false);
         gameOverMenu.SetActive(false);
+        gameYouWonMenu.SetActive(false);
         gameplayHUD.SetActive(true);
 
         Time.timeScale = 1f;
@@ -121,6 +125,18 @@ public class UIManager : MonoBehaviour
 
         Time.timeScale = 0f;
     }
+    // ================= You Won =================
+public void ShowYouWon()
+{
+    gameplayHUD.SetActive(false);
+    pauseMenu.SetActive(false);
+    optionsMenu.SetActive(false);
+    gameOverMenu.SetActive(false);
+    gameYouWonMenu.SetActive(true);
+
+    Time.timeScale = 0f;
+}
+
 
     // ================= BUTTON ACTIONS =================
 

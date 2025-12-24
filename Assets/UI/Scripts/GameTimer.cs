@@ -95,9 +95,11 @@ public class GameTimer : MonoBehaviour
         timerText.transform.localScale = originalScale * scale;
     }
 
-    void OnTimeUp()
-    {
-        Debug.Log("[GameTimer] TIME UP");
-        uiManager.ShowGameOver();
-    }
+void OnTimeUp()
+{
+    Debug.Log("[GameTimer] TIME UP");
+    SoundManager.Instance.PlayGameOver();
+    uiManager.ShowGameOver();
+}
+
 }

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 7022af4e8076817428e88c13ae447b01
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - tickSound: {instanceID: 0}
+  - goSound: {fileID: 8300000, guid: 05c0fee29d884c849b98c128a17713fd, type: 3}
+  - winSound: {fileID: 8300000, guid: 0a119c8f150155d49a9b42843d168718, type: 3}
+  - gameOverSound: {fileID: 8300000, guid: 7cdc74ded4ddf974eac2e2c031859d82, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
