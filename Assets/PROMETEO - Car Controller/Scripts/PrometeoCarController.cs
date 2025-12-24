@@ -15,29 +15,41 @@ using UnityEngine.UI;
 public class PrometeoCarController : MonoBehaviour
 {
     public float downforce = 140f;
-    
-    [Space(10)]
-    [Range(5000f, 50000f)]
-    public float enginePower = 50000f;   // greatly increased for maximum acceleration
-
 
     //CAR SETUP
     [Space(20)]
+    [Range(20, 1000)]
+    public int maxSpeed = 400; // km/h
+    [Range(20, 200)]
+    public int maxReverseSpeed = 80; // km/h
+    [Range(1, 10)]
+    public int accelerationMultiplier = 10;
+
     [Space(10)]
-    [Range(20, 5000)]
-    public int maxSpeed = 5000; // km/h (set very high for maximum top speed)
-    [Range(10, 500)]
-    public int maxReverseSpeed = 200; // km/h (increased reverse for consistency)
-    [Range(1, 50)]
-    public int accelerationMultiplier = 50; // set to maximum for extreme acceleration
+    [Tooltip("Multiplier applied to torque when sprinting (e.g., 1.3 = 30% more)")]
+    [Range(1f, 3f)]
+    public float sprintMultiplier = 1.35f;
+
+    [Tooltip("Maximum forward speed while sprinting (km/h)")]
+    [Range(20, 2000)]
+    public int sprintMaxSpeed = 500;
+
+    [Tooltip("Key used to sprint")]
+    public KeyCode sprintKey = KeyCode.LeftShift;
+
+    [Space(10)]
+    [Range(5000f, 20000f)]
+    public float enginePower = 12000f; // FAST: increase this for stronger acceleration (replaces old 7000f)
+
     [Space(10)]
     [Range(10, 45)]
     public int maxSteeringAngle = 27;
     [Range(0.1f, 1f)]
     public float steeringSpeed = 0.5f;
+
     [Space(10)]
-    [Range(100, 600)]
-    public int brakeForce = 350;
+    [Range(100, 800)]
+    public int brakeForce = 650;
     [Range(1, 10)]
     public int decelerationMultiplier = 2;
     [Range(1, 10)]
@@ -48,9 +60,9 @@ public class PrometeoCarController : MonoBehaviour
 
     // --- TUNING (Less drift + better braking) ---
     [Space(20)]
-    [Range(0.5f, 3f)] public float baseSidewaysStiffness = 1.35f;  // more = more grip
-    [Range(0.5f, 3f)] public float baseForwardStiffness = 1.15f;   // more = more grip
-    [Range(1f, 20f)]  public float brakeToReverseSpeedKPH = 8f;    // brake first above this speed
+    [Range(0.5f, 3f)] public float baseSidewaysStiffness = 1.6f;  // more = more grip
+    [Range(0.5f, 3f)] public float baseForwardStiffness = 1.5f;   // more = more grip
+    [Range(0.5f, 20f)]  public float brakeToReverseSpeedKPH = 2f;    // brake first above this speed
     [Range(0.3f, 1f)] public float rearHandbrakeStiffnessFactor = 0.75f; // 0.75 slight drift, 0.6 more drift
 
     //WHEELS
@@ -68,7 +80,6 @@ public class PrometeoCarController : MonoBehaviour
 
     //PARTICLE SYSTEMS
     [Space(20)]
-    [Space(10)]
     public bool useEffects = false;
 
     public ParticleSystem RLWParticleSystem;
@@ -80,13 +91,11 @@ public class PrometeoCarController : MonoBehaviour
 
     //SPEED TEXT (UI)
     [Space(20)]
-    [Space(10)]
     public bool useUI = false;
     public Text carSpeedText;
 
     //SOUNDS
     [Space(20)]
-    [Space(10)]
     public bool useSounds = false;
     public AudioSource carEngineSound;
     public AudioSource tireScreechSound;
@@ -94,7 +103,6 @@ public class PrometeoCarController : MonoBehaviour
 
     //CONTROLS
     [Space(20)]
-    [Space(10)]
     public bool useTouchControls = false;
     public GameObject throttleButton;
     PrometeoTouchInput throttlePTI;
@@ -122,8 +130,15 @@ public class PrometeoCarController : MonoBehaviour
     bool deceleratingCar;
     bool touchControlsSetup = false;
 
-    // New brake state
+    // Sprint state
+    bool isSprinting = false;
+
+    // Reverse/brake helper
+    bool waitingForReverse = false;
+
+    // Brake state
     bool isBraking = false;
+    float currentBrakeStrength = 0f;  // Smooth brake application
 
     WheelFrictionCurve FLwheelFriction;
     float FLWextremumSlip;
@@ -142,17 +157,40 @@ public class PrometeoCarController : MonoBehaviour
     {
         if (carRigidbody == null) return;
 
+        // Smooth brake strength application (prevents lockup)
+        float targetBrakeStrength = isBraking ? 1f : 0f;
+        currentBrakeStrength = Mathf.Lerp(currentBrakeStrength, targetBrakeStrength, Time.deltaTime * 20f);  // Fast brake application
+
+        // Apply smoothed brake strength to wheels
+        if (currentBrakeStrength > 0.01f)
+        {
+            frontLeftCollider.brakeTorque = brakeForce * 1.3f * currentBrakeStrength;
+            frontRightCollider.brakeTorque = brakeForce * 1.3f * currentBrakeStrength;
+            rearLeftCollider.brakeTorque = brakeForce * 0.7f * currentBrakeStrength;
+            rearRightCollider.brakeTorque = brakeForce * 0.7f * currentBrakeStrength;
+        }
+        else
+        {
+            frontLeftCollider.brakeTorque = 0f;
+            frontRightCollider.brakeTorque = 0f;
+            rearLeftCollider.brakeTorque = 0f;
+            rearRightCollider.brakeTorque = 0f;
+        }
+
         // Downforce (helps stick to track)
         carRigidbody.AddForce(-transform.up * downforce * carRigidbody.velocity.magnitude);
 
-        // Hard speed limiter (fixes "wrong" speed / runaway acceleration)
+        // Soft speed limiter (prevents runaway speed but decelerates smoothly)
         float speedKph = carRigidbody.velocity.magnitude * 3.6f;
         float localZ = transform.InverseTransformDirection(carRigidbody.velocity).z;
 
-        float maxKph = (localZ >= 0f) ? maxSpeed : maxReverseSpeed;
-        if (speedKph > maxKph)
+        float forwardMaxKph = (localZ >= 0f) ? (isSprinting ? sprintMaxSpeed : maxSpeed) : maxReverseSpeed;
+        if (speedKph > forwardMaxKph)
         {
-            carRigidbody.velocity = carRigidbody.velocity.normalized * (maxKph / 3.6f);
+            // Smoothly lerp the velocity down towards the allowed max instead of snapping
+            Vector3 targetVel = carRigidbody.velocity.normalized * (forwardMaxKph / 3.6f);
+            float smoothing = 2.0f; // higher = faster deceleration to cap
+            carRigidbody.velocity = Vector3.Lerp(carRigidbody.velocity, targetVel, Time.deltaTime * smoothing);
         }
     }
 
@@ -164,38 +202,11 @@ public class PrometeoCarController : MonoBehaviour
         // Add more grip so the car doesn't drift too much
         ApplyBaseGrip();
 
-        // Save default wheel friction values (after base grip tuning)
-        FLwheelFriction = new WheelFrictionCurve();
-        FLwheelFriction.extremumSlip = frontLeftCollider.sidewaysFriction.extremumSlip;
-        FLWextremumSlip = frontLeftCollider.sidewaysFriction.extremumSlip;
-        FLwheelFriction.extremumValue = frontLeftCollider.sidewaysFriction.extremumValue;
-        FLwheelFriction.asymptoteSlip = frontLeftCollider.sidewaysFriction.asymptoteSlip;
-        FLwheelFriction.asymptoteValue = frontLeftCollider.sidewaysFriction.asymptoteValue;
-        FLwheelFriction.stiffness = frontLeftCollider.sidewaysFriction.stiffness;
-
-        FRwheelFriction = new WheelFrictionCurve();
-        FRwheelFriction.extremumSlip = frontRightCollider.sidewaysFriction.extremumSlip;
-        FRWextremumSlip = frontRightCollider.sidewaysFriction.extremumSlip;
-        FRwheelFriction.extremumValue = frontRightCollider.sidewaysFriction.extremumValue;
-        FRwheelFriction.asymptoteSlip = frontRightCollider.sidewaysFriction.asymptoteSlip;
-        FRwheelFriction.asymptoteValue = frontRightCollider.sidewaysFriction.asymptoteValue;
-        FRwheelFriction.stiffness = frontRightCollider.sidewaysFriction.stiffness;
-
-        RLwheelFriction = new WheelFrictionCurve();
-        RLwheelFriction.extremumSlip = rearLeftCollider.sidewaysFriction.extremumSlip;
-        RLWextremumSlip = rearLeftCollider.sidewaysFriction.extremumSlip;
-        RLwheelFriction.extremumValue = rearLeftCollider.sidewaysFriction.extremumValue;
-        RLwheelFriction.asymptoteSlip = rearLeftCollider.sidewaysFriction.asymptoteSlip;
-        RLwheelFriction.asymptoteValue = rearLeftCollider.sidewaysFriction.asymptoteValue;
-        RLwheelFriction.stiffness = rearLeftCollider.sidewaysFriction.stiffness;
-
-        RRwheelFriction = new WheelFrictionCurve();
-        RRwheelFriction.extremumSlip = rearRightCollider.sidewaysFriction.extremumSlip;
-        RRWextremumSlip = rearRightCollider.sidewaysFriction.extremumSlip;
-        RRwheelFriction.extremumValue = rearRightCollider.sidewaysFriction.extremumValue;
-        RRwheelFriction.asymptoteSlip = rearRightCollider.sidewaysFriction.asymptoteSlip;
-        RRwheelFriction.asymptoteValue = rearRightCollider.sidewaysFriction.asymptoteValue;
-        RRwheelFriction.stiffness = rearRightCollider.sidewaysFriction.stiffness;
+        // Initialize wheel friction curves
+        InitializeWheelFriction(frontLeftCollider, out FLwheelFriction, out FLWextremumSlip);
+        InitializeWheelFriction(frontRightCollider, out FRwheelFriction, out FRWextremumSlip);
+        InitializeWheelFriction(rearLeftCollider, out RLwheelFriction, out RLWextremumSlip);
+        InitializeWheelFriction(rearRightCollider, out RRwheelFriction, out RRWextremumSlip);
 
         // Save base stiffness for rear wheels (used by handbrake tuning)
         RLWstiffnessBase = rearLeftCollider.sidewaysFriction.stiffness;
@@ -210,7 +221,7 @@ public class PrometeoCarController : MonoBehaviour
         {
             InvokeRepeating("CarSpeedUI", 0f, 0.1f);
         }
-        else if (!useUI)
+        else
         {
             if (carSpeedText != null) carSpeedText.text = "0";
         }
@@ -219,7 +230,7 @@ public class PrometeoCarController : MonoBehaviour
         {
             InvokeRepeating("CarSounds", 0f, 0.1f);
         }
-        else if (!useSounds)
+        else
         {
             if (carEngineSound != null) carEngineSound.Stop();
             if (tireScreechSound != null) tireScreechSound.Stop();
@@ -227,10 +238,7 @@ public class PrometeoCarController : MonoBehaviour
 
         if (!useEffects)
         {
-            if (RLWParticleSystem != null) RLWParticleSystem.Stop();
-            if (RRWParticleSystem != null) RRWParticleSystem.Stop();
-            if (RLWTireSkid != null) RLWTireSkid.emitting = false;
-            if (RRWTireSkid != null) RRWTireSkid.emitting = false;
+            StopAllEffects();
         }
 
         if (useTouchControls)
@@ -262,6 +270,9 @@ public class PrometeoCarController : MonoBehaviour
         localVelocityX = transform.InverseTransformDirection(carRigidbody.velocity).x;
         localVelocityZ = transform.InverseTransformDirection(carRigidbody.velocity).z;
 
+        // Sprint state: only enabled for keyboard controls
+        isSprinting = !useTouchControls && Input.GetKey(sprintKey);
+
         //INPUT + PHYSICS
         if (useTouchControls && touchControlsSetup)
         {
@@ -269,6 +280,8 @@ public class PrometeoCarController : MonoBehaviour
             {
                 CancelInvoke("DecelerateCar");
                 deceleratingCar = false;
+                // Cancel any pending reverse request
+                waitingForReverse = false;
                 ReleaseBrakes();
                 GoForward();
             }
@@ -278,14 +291,16 @@ public class PrometeoCarController : MonoBehaviour
                 CancelInvoke("DecelerateCar");
                 deceleratingCar = false;
 
-                // Brake first when still moving forward
-                if (localVelocityZ > 1f && Mathf.Abs(carSpeed) > brakeToReverseSpeedKPH)
+                // Brake first when still moving forward, set waiting flag so we don't flip immediately
+                if (localVelocityZ > 0.2f && Mathf.Abs(carSpeed) > brakeToReverseSpeedKPH)
                 {
                     ThrottleOff();
                     ApplyBrakes(1f);
+                    waitingForReverse = true;
                 }
                 else
                 {
+                    waitingForReverse = false;
                     ReleaseBrakes();
                     GoReverse();
                 }
@@ -307,6 +322,8 @@ public class PrometeoCarController : MonoBehaviour
 
             if ((!throttlePTI.buttonPressed && !reversePTI.buttonPressed))
             {
+                // If user released reverse while waiting, clear waiting flag
+                waitingForReverse = false;
                 ReleaseBrakes();
                 ThrottleOff();
             }
@@ -330,27 +347,31 @@ public class PrometeoCarController : MonoBehaviour
             bool d = Input.GetKey(KeyCode.D);
             bool space = Input.GetKey(KeyCode.Space);
 
+            // W has priority: if pressed, cancel any reverse/brake operations
             if (w)
             {
                 CancelInvoke("DecelerateCar");
                 deceleratingCar = false;
+                // Cancel any pending reverse request
+                waitingForReverse = false;
                 ReleaseBrakes();
                 GoForward();
             }
-
-            if (s)
+            else if (s)  // Only check S if W is not pressed
             {
                 CancelInvoke("DecelerateCar");
                 deceleratingCar = false;
 
-                // Brake first when still moving forward
-                if (localVelocityZ > 1f && Mathf.Abs(carSpeed) > brakeToReverseSpeedKPH)
+                // Brake first when still moving forward, set waiting flag so we don't flip immediately
+                if (localVelocityZ > 0.2f && Mathf.Abs(carSpeed) > brakeToReverseSpeedKPH)
                 {
                     ThrottleOff();
                     ApplyBrakes(1f);
+                    waitingForReverse = true;
                 }
                 else
                 {
+                    waitingForReverse = false;
                     ReleaseBrakes();
                     GoReverse();
                 }
@@ -373,6 +394,8 @@ public class PrometeoCarController : MonoBehaviour
 
             if (!w && !s)
             {
+                // If user released reverse while waiting, clear waiting flag
+                waitingForReverse = false;
                 ReleaseBrakes();
                 ThrottleOff();
             }
@@ -393,6 +416,36 @@ public class PrometeoCarController : MonoBehaviour
     }
 
     // === GRIP HELPERS ===
+    void StopAllEffects()
+    {
+        if (RLWParticleSystem != null) RLWParticleSystem.Stop();
+        if (RRWParticleSystem != null) RRWParticleSystem.Stop();
+        if (RLWTireSkid != null) RLWTireSkid.emitting = false;
+        if (RRWTireSkid != null) RRWTireSkid.emitting = false;
+    }
+
+    void InitializeWheelFriction(WheelCollider wc, out WheelFrictionCurve friction, out float extremumSlip)
+    {
+        var sf = wc.sidewaysFriction;
+        friction = new WheelFrictionCurve()
+        {
+            extremumSlip = sf.extremumSlip,
+            extremumValue = sf.extremumValue,
+            asymptoteSlip = sf.asymptoteSlip,
+            asymptoteValue = sf.asymptoteValue,
+            stiffness = sf.stiffness
+        };
+        extremumSlip = sf.extremumSlip;
+    }
+
+    void SetWheelTorque(float torque)
+    {
+        frontLeftCollider.motorTorque = torque;
+        frontRightCollider.motorTorque = torque;
+        rearLeftCollider.motorTorque = torque;
+        rearRightCollider.motorTorque = torque;
+    }
+
     void ApplyBaseGrip()
     {
         ApplyGripToWheel(frontLeftCollider);
@@ -417,50 +470,31 @@ public class PrometeoCarController : MonoBehaviour
     // UI
     public void CarSpeedUI()
     {
-        if (useUI)
-        {
-            try
-            {
-                float absoluteCarSpeed = Mathf.Abs(carSpeed);
-                carSpeedText.text = Mathf.RoundToInt(absoluteCarSpeed).ToString();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning(ex);
-            }
-        }
+        if (!useUI || carSpeedText == null) return;
+        carSpeedText.text = Mathf.RoundToInt(Mathf.Abs(carSpeed)).ToString();
     }
 
     // Sounds
     public void CarSounds()
     {
-        if (useSounds)
-        {
-            try
-            {
-                if (carEngineSound != null)
-                {
-                    float engineSoundPitch = initialCarEngineSoundPitch + (Mathf.Abs(carRigidbody.velocity.magnitude) / 25f);
-                    carEngineSound.pitch = engineSoundPitch;
-                }
-                if ((isDrifting) || (isTractionLocked && Mathf.Abs(carSpeed) > 12f))
-                {
-                    if (!tireScreechSound.isPlaying) tireScreechSound.Play();
-                }
-                else if ((!isDrifting) && (!isTractionLocked || Mathf.Abs(carSpeed) < 12f))
-                {
-                    tireScreechSound.Stop();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning(ex);
-            }
-        }
-        else if (!useSounds)
+        if (!useSounds)
         {
             if (carEngineSound != null && carEngineSound.isPlaying) carEngineSound.Stop();
             if (tireScreechSound != null && tireScreechSound.isPlaying) tireScreechSound.Stop();
+            return;
+        }
+
+        if (carEngineSound != null)
+        {
+            float engineSoundPitch = initialCarEngineSoundPitch + (Mathf.Abs(carRigidbody.velocity.magnitude) / 25f);
+            carEngineSound.pitch = engineSoundPitch;
+        }
+
+        bool shouldScratch = (isDrifting) || (isTractionLocked && Mathf.Abs(carSpeed) > 12f);
+        if (tireScreechSound != null)
+        {
+            if (shouldScratch && !tireScreechSound.isPlaying) tireScreechSound.Play();
+            else if (!shouldScratch && tireScreechSound.isPlaying) tireScreechSound.Stop();
         }
     }
 
@@ -501,36 +535,18 @@ public class PrometeoCarController : MonoBehaviour
 
     void AnimateWheelMeshes()
     {
-        try
-        {
-            Quaternion FLWRotation;
-            Vector3 FLWPosition;
-            frontLeftCollider.GetWorldPose(out FLWPosition, out FLWRotation);
-            frontLeftMesh.transform.position = FLWPosition;
-            frontLeftMesh.transform.rotation = FLWRotation;
+        UpdateWheelMesh(frontLeftCollider, frontLeftMesh);
+        UpdateWheelMesh(frontRightCollider, frontRightMesh);
+        UpdateWheelMesh(rearLeftCollider, rearLeftMesh);
+        UpdateWheelMesh(rearRightCollider, rearRightMesh);
+    }
 
-            Quaternion FRWRotation;
-            Vector3 FRWPosition;
-            frontRightCollider.GetWorldPose(out FRWPosition, out FRWRotation);
-            frontRightMesh.transform.position = FRWPosition;
-            frontRightMesh.transform.rotation = FRWRotation;
-
-            Quaternion RLWRotation;
-            Vector3 RLWPosition;
-            rearLeftCollider.GetWorldPose(out RLWPosition, out RLWRotation);
-            rearLeftMesh.transform.position = RLWPosition;
-            rearLeftMesh.transform.rotation = RLWRotation;
-
-            Quaternion RRWRotation;
-            Vector3 RRWPosition;
-            rearRightCollider.GetWorldPose(out RRWPosition, out RRWRotation);
-            rearRightMesh.transform.position = RRWPosition;
-            rearRightMesh.transform.rotation = RRWRotation;
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning(ex);
-        }
+    void UpdateWheelMesh(WheelCollider wc, GameObject mesh)
+    {
+        if (mesh == null) return;
+        wc.GetWorldPose(out Vector3 pos, out Quaternion rot);
+        mesh.transform.position = pos;
+        mesh.transform.rotation = rot;
     }
 
     //
@@ -538,16 +554,8 @@ public class PrometeoCarController : MonoBehaviour
     //
     public void GoForward()
     {
-        if (Mathf.Abs(localVelocityX) > 2.5f)
-        {
-            isDrifting = true;
-            DriftCarPS();
-        }
-        else
-        {
-            isDrifting = false;
-            DriftCarPS();
-        }
+        isDrifting = Mathf.Abs(localVelocityX) > 2.5f;
+        DriftCarPS();
 
         throttleAxis = throttleAxis + (Time.deltaTime * 3f);
         if (throttleAxis > 1f) throttleAxis = 1f;
@@ -558,37 +566,24 @@ public class PrometeoCarController : MonoBehaviour
         }
         else
         {
-            if (Mathf.RoundToInt(carSpeed) < maxSpeed)
+            int activeMax = isSprinting ? sprintMaxSpeed : maxSpeed;
+            if (Mathf.RoundToInt(carSpeed) < activeMax)
             {
                 ReleaseBrakes();
-
-                frontLeftCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
-                frontRightCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
-                rearLeftCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
-                rearRightCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
+                float torque = (accelerationMultiplier * enginePower) * throttleAxis * (isSprinting ? sprintMultiplier : 1f);
+                SetWheelTorque(torque);
             }
             else
             {
-                frontLeftCollider.motorTorque = 0;
-                frontRightCollider.motorTorque = 0;
-                rearLeftCollider.motorTorque = 0;
-                rearRightCollider.motorTorque = 0;
+                SetWheelTorque(0);
             }
         }
     }
 
     public void GoReverse()
     {
-        if (Mathf.Abs(localVelocityX) > 2.5f)
-        {
-            isDrifting = true;
-            DriftCarPS();
-        }
-        else
-        {
-            isDrifting = false;
-            DriftCarPS();
-        }
+        isDrifting = Mathf.Abs(localVelocityX) > 2.5f;
+        DriftCarPS();
 
         throttleAxis = throttleAxis - (Time.deltaTime * 3f);
         if (throttleAxis < -1f) throttleAxis = -1f;
@@ -602,42 +597,25 @@ public class PrometeoCarController : MonoBehaviour
             if (Mathf.Abs(Mathf.RoundToInt(carSpeed)) < maxReverseSpeed)
             {
                 ReleaseBrakes();
-
-                frontLeftCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
-                frontRightCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
-                rearLeftCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
-                rearRightCollider.motorTorque = (accelerationMultiplier * enginePower) * throttleAxis;
+                float torque = (accelerationMultiplier * enginePower) * throttleAxis;
+                SetWheelTorque(torque);
             }
             else
             {
-                frontLeftCollider.motorTorque = 0;
-                frontRightCollider.motorTorque = 0;
-                rearLeftCollider.motorTorque = 0;
-                rearRightCollider.motorTorque = 0;
+                SetWheelTorque(0);
             }
         }
     }
 
     public void ThrottleOff()
     {
-        frontLeftCollider.motorTorque = 0;
-        frontRightCollider.motorTorque = 0;
-        rearLeftCollider.motorTorque = 0;
-        rearRightCollider.motorTorque = 0;
+        SetWheelTorque(0);
     }
 
     public void DecelerateCar()
     {
-        if (Mathf.Abs(localVelocityX) > 2.5f)
-        {
-            isDrifting = true;
-            DriftCarPS();
-        }
-        else
-        {
-            isDrifting = false;
-            DriftCarPS();
-        }
+        isDrifting = Mathf.Abs(localVelocityX) > 2.5f;
+        DriftCarPS();
 
         if (throttleAxis != 0f)
         {
@@ -648,11 +626,7 @@ public class PrometeoCarController : MonoBehaviour
         }
 
         carRigidbody.velocity = carRigidbody.velocity * (1f / (1f + (0.025f * decelerationMultiplier)));
-
-        frontLeftCollider.motorTorque = 0;
-        frontRightCollider.motorTorque = 0;
-        rearLeftCollider.motorTorque = 0;
-        rearRightCollider.motorTorque = 0;
+        SetWheelTorque(0);
 
         if (carRigidbody.velocity.magnitude < 0.25f)
         {
@@ -664,25 +638,13 @@ public class PrometeoCarController : MonoBehaviour
     // === REAL BRAKES ===
     public void ApplyBrakes(float strength01)
     {
-        float s = Mathf.Clamp01(strength01);
-        isBraking = s > 0f;
-
-        // Front bias braking (stable)
-        frontLeftCollider.brakeTorque = brakeForce * 1.3f * s;
-        frontRightCollider.brakeTorque = brakeForce * 1.3f * s;
-        rearLeftCollider.brakeTorque = brakeForce * 0.7f * s;
-        rearRightCollider.brakeTorque = brakeForce * 0.7f * s;
+        isBraking = Mathf.Clamp01(strength01) > 0f;
     }
 
     public void ReleaseBrakes()
     {
-        if (!isBraking) return;
         isBraking = false;
-
-        frontLeftCollider.brakeTorque = 0f;
-        frontRightCollider.brakeTorque = 0f;
-        rearLeftCollider.brakeTorque = 0f;
-        rearRightCollider.brakeTorque = 0f;
+        // Brake torque is handled smoothly in FixedUpdate
     }
 
     // Compatibility for old calls
@@ -725,51 +687,24 @@ public class PrometeoCarController : MonoBehaviour
 
     public void DriftCarPS()
     {
-        if (useEffects)
-        {
-            try
-            {
-                if (isDrifting)
-                {
-                    RLWParticleSystem.Play();
-                    RRWParticleSystem.Play();
-                }
-                else
-                {
-                    RLWParticleSystem.Stop();
-                    RRWParticleSystem.Stop();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning(ex);
-            }
+        if (!useEffects) return;
 
-            try
-            {
-                if ((isTractionLocked || Mathf.Abs(localVelocityX) > 5f) && Mathf.Abs(carSpeed) > 12f)
-                {
-                    RLWTireSkid.emitting = true;
-                    RRWTireSkid.emitting = true;
-                }
-                else
-                {
-                    RLWTireSkid.emitting = false;
-                    RRWTireSkid.emitting = false;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning(ex);
-            }
+        // Particle systems
+        if (isDrifting)
+        {
+            if (RLWParticleSystem != null) RLWParticleSystem.Play();
+            if (RRWParticleSystem != null) RRWParticleSystem.Play();
         }
         else
         {
             if (RLWParticleSystem != null) RLWParticleSystem.Stop();
             if (RRWParticleSystem != null) RRWParticleSystem.Stop();
-            if (RLWTireSkid != null) RLWTireSkid.emitting = false;
-            if (RRWTireSkid != null) RRWTireSkid.emitting = false;
         }
+
+        // Tire skid trails
+        bool shouldSkid = (isTractionLocked || Mathf.Abs(localVelocityX) > 5f) && Mathf.Abs(carSpeed) > 12f;
+        if (RLWTireSkid != null) RLWTireSkid.emitting = shouldSkid;
+        if (RRWTireSkid != null) RRWTireSkid.emitting = shouldSkid;
     }
 
     public void RecoverTraction()
