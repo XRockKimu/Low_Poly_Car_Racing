@@ -51,5 +51,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Low_Poly_Car_Racing.sln"
+    "dotnet.defaultSolution": "Final_project.sln"
 }
