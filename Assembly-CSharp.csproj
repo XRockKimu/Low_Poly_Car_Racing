@@ -78,6 +78,7 @@
     <Compile Include="Assets\UI\Scripts\UIManager.cs" />
     <Compile Include="Assets\UI\Scripts\UIButtonScale.cs" />
     <Compile Include="Assets\PROMETEO - Car Controller\Scripts\PrometeoCarController.cs" />
+    <Compile Include="Assets\UI\Scripts\CountdownController.cs" />
     <Compile Include="Assets\Scenes\CameraFollow.cs" />
   </ItemGroup>
   <ItemGroup>
